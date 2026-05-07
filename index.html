@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vision Cursor — Touchless Control Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #050810;
+    --surface: #0d1117;
+    --border: #1e2530;
+    --accent: #00f5c4;
+    --accent2: #ff4d6d;
+    --accent3: #7b61ff;
+    --text: #e8edf5;
+    --muted: #5a6580;
+    --glow: 0 0 30px rgba(0,245,196,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Noise texture overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+
+  /* ── Grid background ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,245,196,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,196,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Header ── */
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 2rem 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    box-shadow: var(--glow);
+  }
+
+  .logo-text {
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+    border: 1px solid rgba(0,245,196,0.3);
+    padding: 0.25rem 0.75rem;
+    border-radius: 100px;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    z-index: 10;
+    text-align: center;
+    padding: 4rem 2rem 2rem;
+  }
+
+  .hero-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .hero-tag::before, .hero-tag::after {
+    content: '';
+    width: 40px; height: 1px;
+    background: var(--accent);
+    opacity: 0.4;
+  }
+
+  h1 {
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 1.5rem;
+  }
+
+  h1 .line2 { color: var(--accent); }
+
+  .hero-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--muted);
+    max-width: 500px;
+    margin: 0 auto 3rem;
+    line-height: 1.7;
+  }
+
+  /* ── Main demo area ── */
+  .demo-container {
+    position: relative;
+    z-index: 10;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem 4rem;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* ── Camera panel ── */
+  .camera-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .panel-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: all 0.3s;
+  }
+  .status-dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1.5s infinite; }
+  .status-dot.tracking { background: #00f5c4; box-shadow: 0 0 12px #00f5c4; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .video-wrapper {
+    position: relative;
+    aspect-ratio: 4/3;
+    background: #000;
+  }
+
+  #videoEl {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    display: block;
+  }
+
+  #canvasEl {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+  }
+
+  /* Custom cursor overlay */
+  #cursorDot {
+    position: absolute;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 20px var(--accent);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: transform 0.05s;
+    z-index: 100;
+    display: none;
+  }
+
+  /* Dwell ring */
+  #dwellRing {
+    position: absolute;
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(0);
+    z-index: 101;
+    display: none;
+    transition: transform 0.1s;
+  }
+
+  .start-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5,8,16,0.85);
+    backdrop-filter: blur(4px);
+    z-index: 50;
+    gap: 1rem;
+    cursor: pointer;
+    transition: opacity 0.3s;
+  }
+
+  .start-overlay:hover { background: rgba(5,8,16,0.75); }
+
+  .start-icon {
+    width: 64px; height: 64px;
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    box-shadow: var(--glow);
+    animation: breathe 2s ease-in-out infinite;
+  }
+
+  @keyframes breathe {
+    0%, 100% { box-shadow: 0 0 20px rgba(0,245,196,0.2); }
+    50% { box-shadow: 0 0 40px rgba(0,245,196,0.5); }
+  }
+
+  .start-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+  }
+
+  /* ── Interactive demo zone ── */
+  .demo-zone {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .click-target {
+    position: absolute;
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(0,245,196,0.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    cursor: pointer;
+    pointer-events: all;
+    transition: all 0.2s;
+    background: rgba(0,245,196,0.05);
+  }
+
+  .click-target:hover, .click-target.hit {
+    border-color: var(--accent);
+    background: rgba(0,245,196,0.2);
+    box-shadow: 0 0 20px rgba(0,245,196,0.3);
+    transform: scale(1.15);
+  }
+
+  .click-target.hit { animation: hitPop 0.4s ease-out forwards; }
+
+  @keyframes hitPop {
+    0% { transform: scale(1.15); }
+    50% { transform: scale(1.4); background: rgba(0,245,196,0.4); }
+    100% { transform: scale(1); }
+  }
+
+  /* ── Side panel ── */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .card-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  /* Stats */
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-row:last-child { border-bottom: none; }
+
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-weight: 400;
+  }
+
+  /* Score */
+  .score-display {
+    text-align: center;
+    padding: 1rem 0;
+  }
+
+  .score-number {
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+
+  .score-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+    letter-spacing: 0.1em;
+  }
+
+  /* How it works */
+  .step-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .step {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--accent);
+    border: 1px solid rgba(0,245,196,0.3);
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .step-desc {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .step-desc strong { color: var(--text); font-weight: 700; }
+
+  /* GitHub button */
+  .gh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.75rem;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+  }
+
+  .gh-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: var(--glow);
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--accent);
+    color: #000;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 0.6rem 1.5rem;
+    border-radius: 100px;
+    z-index: 9998;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    letter-spacing: 0.05em;
+  }
+
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Loading */
+  .loading-bar {
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 0.75rem;
+  }
+
+  .loading-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .loading-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    letter-spacing: 0.05em;
+  }
+
+  @media (max-width: 768px) {
+    .demo-container { grid-template-columns: 1fr; }
+    header { padding: 1rem 1.5rem; }
+    h1 { font-size: 2.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">👁</div>
+    <div class="logo-text">Vision<span>Cursor</span></div>
+  </div>
+  <div class="badge">LIVE DEMO</div>
+</header>
+
+<div class="hero">
+  <div class="hero-tag">Touchless Computing</div>
+  <h1>Control your cursor<br><span class="line2">with your hand</span></h1>
+  <p class="hero-sub">// Real-time hand tracking using MediaPipe.<br>No mouse. No touch. Just your index finger.</p>
+</div>
+
+<div class="demo-container">
+
+  <!-- Camera Panel -->
+  <div class="camera-panel">
+    <div class="panel-header">
+      <span class="panel-title">webcam feed</span>
+      <div class="status-dot" id="statusDot"></div>
+    </div>
+
+    <div class="video-wrapper">
+      <video id="videoEl" playsinline autoplay muted></video>
+      <canvas id="canvasEl"></canvas>
+      <div id="cursorDot"></div>
+      <div id="dwellRing"></div>
+
+      <!-- Click targets overlaid on video -->
+      <div class="demo-zone" id="demoZone"></div>
+
+      <!-- Start overlay -->
+      <div class="start-overlay" id="startOverlay" onclick="startCamera()">
+        <div class="start-icon">✋</div>
+        <div class="start-text">CLICK TO ENABLE CAMERA</div>
+        <div id="loadingSection" style="display:none; width:200px; text-align:center;">
+          <div class="loading-bar"><div class="loading-fill" id="loadingFill"></div></div>
+          <div class="loading-text" id="loadingText">Loading MediaPipe…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side Panel -->
+  <div class="side-panel">
+
+    <!-- Score -->
+    <div class="info-card">
+      <div class="card-title">score</div>
+      <div class="score-display">
+        <div class="score-number" id="scoreNum">0</div>
+        <div class="score-label">TARGETS HIT</div>
+      </div>
+    </div>
+
+    <!-- Live stats -->
+    <div class="info-card">
+      <div class="card-title">live stats</div>
+      <div class="stat-row">
+        <span class="stat-label">status</span>
+        <span class="stat-value" id="statStatus">idle</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">hand detected</span>
+        <span class="stat-value" id="statHand">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">finger pos</span>
+        <span class="stat-value" id="statPos">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">dwell</span>
+        <span class="stat-value" id="statDwell">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">fps</span>
+        <span class="stat-value" id="statFps">—</span>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="info-card">
+      <div class="card-title">how it works</div>
+      <div class="step-list">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-desc"><strong>Point</strong> your index finger at a target</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-desc"><strong>Hold still</strong> for ~1.5s to dwell-click</div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-desc"><strong>Hit all targets</strong> to rack up your score</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GitHub -->
+    <a class="gh-btn" href="https://github.com/Abhyudai-ajax/vision-cursor" target="_blank">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+      </svg>
+      View Source on GitHub
+    </a>
+
+  </div>
+</div>
+
+<div id="toast">🎯 Target hit!</div>
+
+<!-- MediaPipe from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ── Config ───────────────────────────────────────────────────────────────
+const DWELL_TIME    = 1500;   // ms to hold still before click
+const DWELL_RADIUS  = 30;     // px — movement threshold
+const SMOOTH_ALPHA  = 0.25;   // EMA smoothing factor
+const NUM_TARGETS   = 5;
+
+// ── State ────────────────────────────────────────────────────────────────
+let score        = 0;
+let smoothX      = 0, smoothY = 0;
+let dwellStart   = null;
+let lastX        = null, lastY = null;
+let lastClickT   = 0;
+let frameCount   = 0, lastFpsT = performance.now();
+let fps          = 0;
+let handDetected = false;
+let targets      = [];
+let cameraStarted = false;
+
+// ── DOM ──────────────────────────────────────────────────────────────────
+const video      = document.getElementById('videoEl');
+const canvas     = document.getElementById('canvasEl');
+const ctx        = canvas.getContext('2d');
+const cursorDot  = document.getElementById('cursorDot');
+const dwellRing  = document.getElementById('dwellRing');
+const overlay    = document.getElementById('startOverlay');
+const demoZone   = document.getElementById('demoZone');
+const statusDot  = document.getElementById('statusDot');
+
+// Stats
+const statStatus = document.getElementById('statStatus');
+const statHand   = document.getElementById('statHand');
+const statPos    = document.getElementById('statPos');
+const statDwell  = document.getElementById('statDwell');
+const statFps    = document.getElementById('statFps');
+const scoreNum   = document.getElementById('scoreNum');
+
+// ── Targets ──────────────────────────────────────────────────────────────
+const EMOJIS = ['🎯','⭐','💎','🔮','🚀','🎪','⚡','🌀'];
+
+function spawnTargets() {
+  demoZone.innerHTML = '';
+  targets = [];
+  for (let i = 0; i < NUM_TARGETS; i++) spawnTarget();
+}
+
+function spawnTarget() {
+  const el = document.createElement('div');
+  el.className = 'click-target';
+  el.textContent = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+  const x = 10 + Math.random() * 75;
+  const y = 10 + Math.random() * 75;
+  el.style.left = x + '%';
+  el.style.top  = y + '%';
+  el.dataset.hit = '0';
+  demoZone.appendChild(el);
+  targets.push(el);
+}
+
+function checkTargetHit(normX, normY) {
+  if (Date.now() - lastClickT < 1200) return;
+  const zone  = demoZone.getBoundingClientRect();
+  const px    = normX * zone.width;
+  const py    = normY * zone.height;
+
+  for (const t of targets) {
+    if (t.dataset.hit === '1') continue;
+    const r  = t.getBoundingClientRect();
+    const tx = r.left - zone.left + r.width  / 2;
+    const ty = r.top  - zone.top  + r.height / 2;
+    const d  = Math.hypot(px - tx, py - ty);
+    if (d < 40) {
+      t.dataset.hit = '1';
+      t.classList.add('hit');
+      score++;
+      scoreNum.textContent = score;
+      showToast('🎯 Hit! +1');
+      lastClickT = Date.now();
+      setTimeout(() => {
+        t.remove();
+        targets = targets.filter(x => x !== t);
+        spawnTarget();
+      }, 500);
+      break;
+    }
+  }
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+// ── Camera start ─────────────────────────────────────────────────────────
+async function startCamera() {
+  if (cameraStarted) return;
+  cameraStarted = true;
+
+  document.getElementById('loadingSection').style.display = 'block';
+  setLoading('Requesting camera…', 10);
+
+  const hands = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
+
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence:  0.6,
+  });
+
+  setLoading('Loading hand model…', 40);
+
+  hands.onResults(onResults);
+
+  setLoading('Starting webcam…', 70);
+
+  const camera = new Camera(video, {
+    onFrame: async () => { await hands.send({ image: video }); },
+    width: 640, height: 480,
+  });
+
+  await camera.start();
+  setLoading('Ready!', 100);
+
+  setTimeout(() => {
+    overlay.style.opacity = '0';
+    setTimeout(() => { overlay.style.display = 'none'; spawnTargets(); }, 400);
+    statusDot.classList.add('active');
+    statStatus.textContent = 'running';
+  }, 500);
+}
+
+function setLoading(msg, pct) {
+  document.getElementById('loadingText').textContent = msg;
+  document.getElementById('loadingFill').style.width = pct + '%';
+}
+
+// ── MediaPipe results ─────────────────────────────────────────────────────
+function onResults(results) {
+  // Resize canvas
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // FPS
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsT > 1000) {
+    fps = Math.round(frameCount * 1000 / (now - lastFpsT));
+    frameCount = 0; lastFpsT = now;
+    statFps.textContent = fps + ' fps';
+  }
+
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    handDetected = false;
+    cursorDot.style.display  = 'none';
+    dwellRing.style.display  = 'none';
+    dwellStart = null; lastX = null; lastY = null;
+    statusDot.classList.remove('tracking');
+    statHand.textContent  = 'no';
+    statPos.textContent   = '—';
+    statDwell.textContent = '—';
+    return;
+  }
+
+  handDetected = true;
+  statusDot.classList.add('tracking');
+  statHand.textContent = 'yes ✓';
+
+  const landmarks = results.multiHandLandmarks[0];
+
+  // Draw skeleton
+  drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'rgba(0,245,196,0.4)', lineWidth: 1.5 });
+  drawLandmarks(ctx,  landmarks, { color: 'rgba(0,245,196,0.8)', lineWidth: 1, radius: 3 });
+
+  // Index fingertip = landmark 8
+  const tip  = landmarks[8];
+  const rawX = tip.x;   // 0→1, already mirrored by CSS scaleX(-1)
+  const rawY = tip.y;
+
+  // EMA smooth
+  if (lastX === null) { smoothX = rawX; smoothY = rawY; }
+  smoothX = SMOOTH_ALPHA * rawX + (1 - SMOOTH_ALPHA) * smoothX;
+  smoothY = SMOOTH_ALPHA * rawY + (1 - SMOOTH_ALPHA) * smoothY;
+
+  // Position cursor dot
+  const vw = video.offsetWidth, vh = video.offsetHeight;
+  const cx = (1 - smoothX) * vw;   // un-mirror for display
+  const cy = smoothY * vh;
+
+  cursorDot.style.display = 'block';
+  cursorDot.style.left    = cx + 'px';
+  cursorDot.style.top     = cy + 'px';
+
+  statPos.textContent = `${Math.round(smoothX*100)}%, ${Math.round(smoothY*100)}%`;
+
+  // ── Dwell logic ─────────────────────────────────────────────────────
+  let moved = false;
+  if (lastX !== null) {
+    const dx = (rawX - lastX) * vw;
+    const dy = (rawY - lastY) * vh;
+    moved = Math.hypot(dx, dy) > DWELL_RADIUS / 10;
+  }
+  lastX = rawX; lastY = rawY;
+
+  if (moved) {
+    dwellStart = Date.now();
+    dwellRing.style.transform = 'translate(-50%,-50%) scale(0)';
+    dwellRing.style.display   = 'none';
+  } else {
+    if (!dwellStart) dwellStart = Date.now();
+    const elapsed  = Date.now() - dwellStart;
+    const progress = Math.min(elapsed / DWELL_TIME, 1);
+
+    statDwell.textContent = (progress * 100).toFixed(0) + '%';
+
+    // Show dwell ring
+    dwellRing.style.display = 'block';
+    dwellRing.style.left    = cx + 'px';
+    dwellRing.style.top     = cy + 'px';
+    dwellRing.style.transform = `translate(-50%,-50%) scale(${0.5 + progress * 0.5})`;
+    dwellRing.style.opacity   = progress;
+    dwellRing.style.borderColor = `hsl(${160 - progress*160}, 100%, 60%)`;
+
+    if (progress >= 1) {
+      // Fire dwell click
+      dwellStart = null;
+      checkTargetHit(1 - smoothX, smoothY);
+      // Flash cursor
+      cursorDot.style.background = '#ff4d6d';
+      setTimeout(() => { cursorDot.style.background = 'var(--accent)'; }, 200);
+    }
+  }
+}
+</script>
+</body>
+</html>
